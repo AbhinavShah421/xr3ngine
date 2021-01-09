@@ -49,9 +49,11 @@ export class SocketWebRTCClientTransport implements NetworkTransport {
 
   // This sends message on a data channel (data channel creation is now handled explicitly/default)
   sendData(data: any, channel = "default"): void {
+    console.log("Sending data on data channel: ", channel);
+    console.log(this.dataProducer);
     if (!this.dataProducer)
       throw new Error('Data Channel not initialized on client, Data Producer doesn\'t exist!');
-    this.dataProducer.send(JSON.stringify(data));
+    if (this.dataProducer.closed === false) this.dataProducer.send(JSON.stringify(data));
   }
 
   // Adds support for Promise to socket.io-client
@@ -146,6 +148,8 @@ export class SocketWebRTCClientTransport implements NetworkTransport {
       // Get information for how to consume data from server and init a data consumer
       this.socket.on(MessageTypes.WebRTCConsumeData.toString(), async (options) => {
         const dataConsumer = await this.instanceRecvTransport.consumeData(options);
+        console.log('dataConsumer:');
+        console.log(dataConsumer);
         MediaStreamComponent.instance.dataConsumers.set(options.dataProducerId, dataConsumer);
 
         dataConsumer.on('message', (message: any) => {

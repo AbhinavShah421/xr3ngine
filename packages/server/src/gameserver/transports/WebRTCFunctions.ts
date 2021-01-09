@@ -75,47 +75,63 @@ export const sendInitialProducers = async (socket: SocketIO.Socket, partyId?: st
     }
 };
 
-export const handleConsumeDataEvent = (socket: SocketIO.Socket) => async (
+export const sendProducerToCurrentClients = (socket: SocketIO.Socket) => async (
     dataProducer: DataProducer
 ): Promise<void> => {
     networkTransport = Network.instance.transport as any;
     const userId = getUserIdFromSocketId(socket.id);
-    logger.info('Data Consumer being created on server by client: ' + userId);
-    const newTransport: Transport = Network.instance.clients[userId].instanceRecvTransport;
-    const dataConsumer = await newTransport.consumeData({
-        dataProducerId: dataProducer.id,
-        appData: { peerId: userId, transportId: newTransport.id },
-        maxPacketLifeTime: dataProducer.sctpStreamParameters.maxPacketLifeTime,
-        maxRetransmits: dataProducer.sctpStreamParameters.maxRetransmits,
-        ordered: false,
-    });
-    dataConsumer.on('message', (message) => {
-        logger.info("Message received!");
-        logger.info(message);
-    });
-    logger.info('Data Consumer created!');
-    dataConsumer.on('producerclose', () => {
-        dataConsumer.close();
-        Network.instance.clients[userId].dataConsumers.delete(
-            dataProducer.id
-        );
-    });
-    logger.info('Setting data consumer to room state');
-    Network.instance.clients[userId].dataConsumers.set(
-        dataProducer.id,
-        dataConsumer
-    );
+    logger.info('New data producer:');
+    logger.info(dataProducer.id);
+    logger.info('User we are checking whether to send for: ' + userId);
+    const selfClient = Network.instance.clients[userId];
+    if (selfClient?.socketId != null) {
+        Object.entries(Network.instance.clients).forEach(async ([name, client]) => {
+            // logger.info('Client:');
+            // logger.info(client);
+            if (name === userId || client.socketId == null)
+                return;
+            logger.info(`Sending media for ${name}`);
 
-    const dataProducerOut = Network.instance.clients[userId].dataProducers.get('default');
-    // Currently Creating a consumer for each client and making it subscribe to the current producer
-    socket.emit(MessageTypes.WebRTCConsumeData.toString(), {
-        dataProducerId: dataProducerOut.id,
-        sctpStreamParameters: dataConsumer.sctpStreamParameters,
-        label: dataConsumer.label,
-        id: dataConsumer.id,
-        appData: dataConsumer.appData,
-        protocol: 'raw',
-    } as MediaSoupClientTypes.DataConsumerOptions);
+            logger.info('Data Consumer being created on server by client: ' + name);
+            const newTransport: Transport = client.instanceRecvTransport;
+            if (newTransport != null) {
+                const dataConsumer = await newTransport.consumeData({
+                    dataProducerId: dataProducer.id,
+                    appData: {peerId: userId, transportId: newTransport.id},
+                    maxPacketLifeTime: dataProducer.sctpStreamParameters.maxPacketLifeTime,
+                    maxRetransmits: dataProducer.sctpStreamParameters.maxRetransmits,
+                    ordered: false,
+                });
+                dataConsumer.on('message', (message) => {
+                    logger.info("Message received!");
+                    logger.info(message);
+                });
+                logger.info('Data Consumer created!');
+                dataConsumer.on('producerclose', () => {
+                    dataConsumer.close();
+                    Network.instance.clients[userId].dataConsumers.delete(
+                        dataProducer.id
+                    );
+                });
+                logger.info('Setting data consumer to room state');
+                Network.instance.clients[userId].dataConsumers.set(
+                    dataProducer.id,
+                    dataConsumer
+                );
+
+                const dataProducerOut = Network.instance.clients[userId].dataProducers.get('default');
+                // Currently Creating a consumer for each client and making it subscribe to the current producer
+                client.socket.emit(MessageTypes.WebRTCConsumeData.toString(), {
+                    dataProducerId: dataProducerOut.id,
+                    sctpStreamParameters: dataConsumer.sctpStreamParameters,
+                    label: dataConsumer.label,
+                    id: dataConsumer.id,
+                    appData: dataConsumer.appData,
+                    protocol: 'raw',
+                } as MediaSoupClientTypes.DataConsumerOptions);
+            }
+        });
+    }
 };
 
 export async function closeTransport(transport): Promise<void> {
@@ -247,7 +263,7 @@ export async function handleWebRtcTransportCreate(socket, data: CreateWebRtcTran
         if (dtlsState === 'closed') closeTransport(newTransport);
     });
     // Create data consumers for other clients if the current client transport receives data producer on it
-    newTransport.observer.on('newdataproducer', handleConsumeDataEvent(socket));
+    newTransport.observer.on('newdataproducer', sendProducerToCurrentClients(socket));
     newTransport.observer.on('newproducer', sendCurrentProducers(socket, partyId));
     callback({ transportOptions: clientTransportOptions });
 }
@@ -269,7 +285,6 @@ export async function handleWebRtcProduceData(socket, data, callback): Promise<a
     const dataProducer = await transport.produceData(options);
     networkTransport.dataProducers.push(dataProducer);
     logger.info(`user ${userId} producing data`);
-    logger.info(`user ${userId} producing data`);
     Network.instance.clients[userId].dataProducers.set(label, dataProducer);
     // if our associated transport closes, close ourself, too
     dataProducer.on("transportclose", () => {
@@ -278,8 +293,6 @@ export async function handleWebRtcProduceData(socket, data, callback): Promise<a
         dataProducer.close();
         Network.instance.clients[userId].dataProducers.delete(label);
     });
-    // transport.handleConsumeDataEvent(socket);
-    logger.info("transport.handleConsumeDataEvent(socket);");
     // Possibly do stuff with appData here
     logger.info("Sending dataproducer id to client:" + dataProducer.id);
     return callback({ id: dataProducer.id });

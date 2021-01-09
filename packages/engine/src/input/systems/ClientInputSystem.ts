@@ -183,9 +183,9 @@ export class InputSystem extends System {
       inputs.viewVector.z = actor.viewVector.z;
 
       if (Network.instance.packetCompression) {
-        Network.instance.transport.sendReliableData(ClientInputModel.toBuffer(inputs));
+        Network.instance.transport.sendData(ClientInputModel.toBuffer(inputs));
       } else {
-        Network.instance.transport.sendReliableData(inputs);
+        Network.instance.transport.sendData(inputs);
       }
 
       //  const buffer = clientInputModel.toBuffer(inputs)

@@ -19,6 +19,8 @@ export async function createDataProducer(channel = "default", type: UnreliableMe
         // maxRetransmits: 3,
         protocol: type // sub-protocol for type of data to be transmitted on the channel e.g. json, raw etc. maybe make type an enum rather than string
     });
+    console.log('data producer created on client!');
+    console.log(dataProducer);
     dataProducer.on("open", () => {
         networkTransport.dataProducer.send(JSON.stringify({ info: 'init' }));
     });

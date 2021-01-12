@@ -73,11 +73,11 @@ export class ServerNetworkOutgoingSystem extends System {
 
       // Send the message to all connected clients
       if(Network.instance.transport !== undefined)
-        Network.instance.transport.sendReliableData(buffer); // Use default channel
+        Network.instance.transport.sendData(buffer); // Use default channel
     } else {
       //addSnapshot(createSnapshot(Network.instance.worldState.transforms));
     //  Network.instance.worldState.snapshot = NetworkInterpolation.instance.get();
-      Network.instance.transport.sendReliableData(Network.instance.worldState);
+      Network.instance.transport.sendData(Network.instance.worldState);
     }
   }
 

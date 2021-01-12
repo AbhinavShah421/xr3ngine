@@ -346,7 +346,7 @@ export async function handleDisconnect(socket): Promise<any> {
     const userId = getUserIdFromSocketId(socket.id);
     const disconnectedClient = Network.instance.clients[userId];
     if (disconnectedClient === undefined)
-        return console.warn("Disconnecting client ' + userId + ' was undefined, probably already handled from JoinWorld handshake");
+        return console.warn('Disconnecting client ' + userId + ' was undefined, probably already handled from JoinWorld handshake');
     //On local, new connections can come in before the old sockets are disconnected.
     //The new connection will overwrite the socketID for the user's client.
     //This will only clear transports if the client's socketId matches the socket that's disconnecting.

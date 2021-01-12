@@ -61,8 +61,6 @@ export const sendInitialProducers = async (socket: SocketIO.Socket, partyId?: st
     const selfClient = Network.instance.clients[userId];
     if (selfClient?.socketId != null) {
         Object.entries(Network.instance.clients).forEach(([name, value]) => {
-            // console.log(name);
-            // console.log(value);
             if (name === userId || value.media == null || value.socketId == null)
                 return;
             logger.info(`Sending media for ${name}`);
@@ -123,6 +121,66 @@ export const sendProducerToCurrentClients = (socket: SocketIO.Socket) => async (
                 // Currently Creating a consumer for each client and making it subscribe to the current producer
                 client.socket.emit(MessageTypes.WebRTCConsumeData.toString(), {
                     dataProducerId: dataProducerOut.id,
+                    sctpStreamParameters: dataConsumer.sctpStreamParameters,
+                    label: dataConsumer.label,
+                    id: dataConsumer.id,
+                    appData: dataConsumer.appData,
+                    protocol: 'raw',
+                } as MediaSoupClientTypes.DataConsumerOptions);
+            }
+        });
+    }
+};
+
+
+// Create consumer for each client!
+export const sendInitialDataProducers = async (socket: SocketIO.Socket, partyId?: string): Promise<void> => {
+    networkTransport = Network.instance.transport as any;
+    const userId = getUserIdFromSocketId(socket.id);
+    logger.info('Sending initial data producers');
+    logger.info('User we are checking whether to send for: ' + userId);
+    const selfClient = Network.instance.clients[userId];
+    if (selfClient?.socketId != null) {
+        Object.entries(Network.instance.clients).forEach(async ([name, client]) => {
+            // logger.info('Client:');
+            // logger.info(client);
+            if (name === userId || client.socketId == null)
+                return;
+            logger.info(`Sending media for ${name}`);
+
+            console.log('Data Consumer being created on server by client: ' + name);
+            const newTransport: Transport = client.instanceRecvTransport;
+            if (newTransport != null) {
+                console.log(client.dataProducers.get('default'));
+                const dataProducer = client.dataProducers.get('default');
+                const dataConsumer = await newTransport.consumeData({
+                    dataProducerId: dataProducer.id,
+                    appData: {peerId: userId, transportId: newTransport.id},
+                    maxPacketLifeTime: dataProducer.maxPacketLifeTime,
+                    maxRetransmits: dataProducer.sctpStreamParameters.maxRetransmits,
+                    ordered: false,
+                });
+                dataConsumer.on('message', (message) => {
+                    logger.info("Message received!");
+                    logger.info(message);
+                });
+                logger.info('Data Consumer created!');
+                dataConsumer.on('producerclose', () => {
+                    dataConsumer.close();
+                    Network.instance.clients[userId].dataConsumers.delete(
+                        dataProducer.id
+                    );
+                });
+                logger.info('Setting data consumer to room state');
+                Network.instance.clients[userId].dataConsumers.set(
+                    dataProducer.id,
+                    dataConsumer
+                );
+
+                const dataProducerOut = Network.instance.clients[userId].dataProducers.get('default');
+                // Currently Creating a consumer for each client and making it subscribe to the current producer
+                selfClient.socket.emit(MessageTypes.WebRTCConsumeData.toString(), {
+                    dataProducerId: dataProducer.id,
                     sctpStreamParameters: dataConsumer.sctpStreamParameters,
                     label: dataConsumer.label,
                     id: dataConsumer.id,
@@ -516,5 +574,6 @@ export async function handleWebRtcRequestCurrentProducers(socket, data, callback
     const { partyId } = data;
 
     await sendInitialProducers(socket, partyId);
+    await sendInitialDataProducers(socket);
     callback({requested: true});
 }
